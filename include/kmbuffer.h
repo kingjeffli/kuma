@@ -24,11 +24,7 @@
 
 #include <memory>
 #include <atomic>
-
-#ifndef KUMA_OS_WIN
-#include <sys/uio.h> // for struct iovec
-#include <string.h> // for memcpy
-#endif
+#include <cstring>
 
 namespace kuma {
 
@@ -182,6 +178,24 @@ private:
 // class KMBuffer
 class KMBuffer
 {
+private:
+    template<typename Allocator>
+    auto* createSharedData(size_t size, Allocator& a)
+    {
+        using AllocatorTraits = std::allocator_traits<Allocator>;
+        static auto null_deleter = [](void*, size_t) {};
+        auto deleter = [a](void* ptr, size_t size) mutable {
+            AllocatorTraits::deallocate(a, (typename AllocatorTraits::pointer)ptr, size);
+        };
+        using _MySharedData = _SharedData<decltype(deleter), decltype(null_deleter)>;
+        size_t shared_size = sizeof(_MySharedData);
+        size_t alloc_size = size + shared_size;
+        auto* buf = AllocatorTraits::allocate(a, alloc_size);
+        auto* data = buf + shared_size;
+        auto* sd = new (buf) _MySharedData(data, size, alloc_size, deleter, null_deleter);
+
+        return sd;
+    }
 public:
     class Iterator;
     enum class StorageType
@@ -326,7 +340,7 @@ public:
         if(0 == ret) return 0;
         ret = ret>len?len:ret;
         if(buf) {
-            memcpy(buf, rd_ptr_, ret);
+            std::memcpy(buf, rd_ptr_, ret);
         }
         rd_ptr_ += ret;
         return ret;
@@ -338,7 +352,7 @@ public:
         if(0 == ret) return 0;
         ret = ret>len?len:ret;
         if(buf) {
-            memcpy(buf, rd_ptr_, ret);
+            std::memcpy(buf, rd_ptr_, ret);
         }
         return ret;
     }
@@ -348,7 +362,7 @@ public:
         size_t ret = space();
         if(0 == ret) return 0;
         ret = ret > len ? len:ret;
-        memcpy(wr_ptr_, buf, ret);
+        std::memcpy(wr_ptr_, buf, ret);
         wr_ptr_ += ret;
         return ret;
     }
@@ -670,24 +684,6 @@ private:
         if(storage_type_ != StorageType::AUTO) {
             delete this;
         }
-    }
-
-    template<typename Allocator>
-    auto* createSharedData(size_t size, Allocator& a)
-    {
-        using AllocatorTraits = std::allocator_traits<Allocator>;
-        static auto null_deleter = [](void*, size_t) {};
-        auto deleter = [a](void* ptr, size_t size) mutable {
-            AllocatorTraits::deallocate(a, (typename AllocatorTraits::pointer)ptr, size);
-        };
-        using _MySharedData = _SharedData<decltype(deleter), decltype(null_deleter)>;
-        size_t shared_size = sizeof(_MySharedData);
-        size_t alloc_size = size + shared_size;
-        auto* buf = AllocatorTraits::allocate(a, alloc_size);
-        auto* data = buf + shared_size;
-        auto* sd = new (buf) _MySharedData(data, size, alloc_size, deleter, null_deleter);
-
-        return sd;
     }
 
 private:

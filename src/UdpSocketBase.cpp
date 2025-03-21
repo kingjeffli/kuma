@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, Fengping Bao <jamol@live.com>
+/* Copyright (c) 2014-2025, Fengping Bao <jamol@live.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,7 @@
 #if defined(KUMA_OS_WIN)
 # include <Ws2tcpip.h>
 # include <windows.h>
+# include <MSWSock.h>
 # include <time.h>
 #elif defined(KUMA_OS_LINUX)
 # include <cstring>
@@ -38,6 +39,11 @@
 # include <arpa/inet.h>
 # include <netinet/tcp.h>
 # include <netinet/in.h>
+# include <netinet/ip.h>
+# include <netinet/ip6.h>
+# include <netinet/ip_icmp.h>
+# include <netinet/icmp6.h>
+# include <linux/filter.h>
 #elif defined(KUMA_OS_MAC)
 # include <string.h>
 # include <pthread.h>
@@ -50,6 +56,10 @@
 # include <sys/uio.h>
 # include <netinet/tcp.h>
 # include <netinet/in.h>
+# include <netinet/ip.h>
+# include <netinet/ip6.h>
+# include <netinet/ip_icmp.h>
+# include <netinet/icmp6.h>
 # include <arpa/inet.h>
 # include <netdb.h>
 # include <ifaddrs.h>
@@ -70,6 +80,14 @@
 #ifdef KUMA_OS_MAC
 #define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP
 #define IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
+#endif
+
+#ifndef IPV6_RECVERR
+#define IPV6_RECVERR 75
+#endif
+
+#ifndef IP_RECVERR
+#define IP_RECVERR 75
 #endif
 
 using namespace kuma;
@@ -98,17 +116,7 @@ bool UdpSocketBase::initSocket(int ss_family)
     if (INVALID_FD != fd_) {
         return true;
     }
-
-    fd_ = createFd(ss_family);
-    if (INVALID_FD == fd_) {
-        KM_ERRXTRACE("initSocket, socket error, err=" << kev::SKUtils::getLastError());
-        return false;
-    }
-    setSocketOption();
-    if (!registerFd(fd_)) {
-        return false;
-    }
-    return true;
+    return init(ss_family, SOCK_DGRAM, IPPROTO_IP) == KMError::NOERR;
 }
 
 void UdpSocketBase::printSocket() const
@@ -125,6 +133,12 @@ void UdpSocketBase::printSocket() const
     }
 }
 
+void UdpSocketBase::onSocketReady()
+{
+    sock_ready_ = true;
+    onSocketInitialized();
+}
+
 void UdpSocketBase::cleanup()
 {
     if (INVALID_FD != fd_) {
@@ -133,21 +147,68 @@ void UdpSocketBase::cleanup()
         shutdown(fd, 2);
         unregisterFd(fd, true);
         connected_ = false;
+        sock_ready_ = false;
     }
 }
 
-SOCKET_FD UdpSocketBase::createFd(int addr_family)
+SOCKET_FD UdpSocketBase::createFd(int addr_family, int sock_type, int ipproto)
 {
-    return ::socket(addr_family, SOCK_DGRAM, 0);
+    return ::socket(addr_family, sock_type, ipproto);
+}
+
+SOCKET_FD UdpSocketBase::createFd_i(int addr_family, int sock_type, int ipproto)
+{
+    if (ipproto == IPPROTO_ICMP && addr_family == AF_INET6) {
+        ipproto = IPPROTO_ICMPV6;
+    } else if (ipproto == IPPROTO_ICMPV6 && addr_family == AF_INET) {
+        ipproto = IPPROTO_ICMP;
+    }
+    auto fd = createFd(addr_family, sock_type, ipproto);
+    if (fd != INVALID_FD) {
+        sock_family_ = addr_family;
+        sock_type_ = sock_type;
+        sock_proto_ = ipproto;
+    }
+    return fd;
+}
+
+KMError UdpSocketBase::init(int addr_family, int sock_type, int ipproto)
+{
+    if (sock_type != SOCK_DGRAM && sock_type != SOCK_RAW) {
+        return KMError::INVALID_PARAM;
+    }
+    cleanup();
+    auto fd = createFd_i(addr_family, sock_type, ipproto);
+    if (fd == INVALID_FD) {
+        KM_ERRXTRACE("init, socket failed, err=" << kev::SKUtils::getLastError());
+        return KMError::SOCK_ERROR;
+    }
+    fd_ = fd;
+    KM_INFOXTRACE("init, fd=" << fd << ", type=" << sock_type << ", proto=" << ipproto);
+    setSocketOption();
+    if (!registerFd(fd_)) {
+        return KMError::FAILED;
+    }
+    return KMError::NOERR;
+}
+
+KMError UdpSocketBase::init(const std::string &dest_host, int sock_type, int ipproto)
+{
+    KM_INFOXTRACE("init, host=" << dest_host);
+    sockaddr_storage ss_addr = {0};
+    if (!getSockAddr(dest_host, 0, ss_addr)) {
+        KM_ERRXTRACE("init, cannot resolve host, host=" << dest_host);
+        return KMError::INVALID_PARAM;
+    }
+    host_dest_ = dest_host;
+    host_addr_ = ss_addr;
+    return init(ss_addr.ss_family, sock_type, ipproto);
 }
 
 KMError UdpSocketBase::bind(const std::string &bind_host, uint16_t bind_port, uint32_t udp_flags)
 {
     KM_INFOXTRACE("bind, bind_host="<<bind_host<<", bind_port="<<bind_port);
-    if(fd_ != INVALID_FD) {
-        cleanup();
-    }
-    
+
     struct addrinfo hints = {0};
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
@@ -157,12 +218,15 @@ KMError UdpSocketBase::bind(const std::string &bind_host, uint16_t bind_port, ui
         KM_ERRXTRACE("bind, km_set_sock_addr failed");
         return KMError::INVALID_PARAM;
     }
-    fd_ = createFd(bind_addr_.ss_family);
-    if(INVALID_FD == fd_) {
-        KM_ERRXTRACE("bind, socket error, err="<<kev::SKUtils::getLastError());
-        return KMError::FAILED;
+    bool registered = fd_ != INVALID_FD;
+    if (fd_ == INVALID_FD) {
+        fd_ = createFd_i(bind_addr_.ss_family, SOCK_DGRAM, IPPROTO_IP);
+        if (fd_ == INVALID_FD) {
+            KM_ERRXTRACE("bind, socket error, err=" << kev::SKUtils::getLastError());
+            return KMError::SOCK_ERROR;
+        }
+        setSocketOption();
     }
-    setSocketOption();
 
     if(AF_INET == bind_addr_.ss_family) {
         auto *sa = (struct sockaddr_in*)&bind_addr_;
@@ -179,20 +243,29 @@ KMError UdpSocketBase::bind(const std::string &bind_host, uint16_t bind_port, ui
         }
 #endif
     } else {
+        if (!registered) {
+            cleanup();
+        }
         return KMError::INVALID_PROTO;
     }
     auto addr_len = static_cast<socklen_t>(kev::km_get_addr_length(bind_addr_));
 
     if(::bind(fd_, (struct sockaddr *)&bind_addr_, addr_len) < 0) {
         KM_ERRXTRACE("bind, bind error: "<<kev::SKUtils::getLastError());
+        if (!registered) {
+            cleanup();
+        }
         return KMError::FAILED;
     }
     printSocket();
-    if (!registerFd(fd_)) {
-        KM_ERRXTRACE("bind, failed to register fd");
-        return KMError::FAILED;
+    if (!registered) {
+        if (!registerFd(fd_)) {
+            KM_ERRXTRACE("bind, failed to register, fd=" << fd_);
+            cleanup();
+            return KMError::FAILED;
+        }
     }
-    onSocketInitialized();
+    onSocketReady();
     return KMError::NOERR;
 }
 
@@ -205,31 +278,39 @@ KMError UdpSocketBase::connect(const std::string &host, uint16_t port)
         return KMError::INVALID_PARAM;
     }
     bool registered = INVALID_FD != fd_;
-    if (INVALID_FD == fd_) {
-        fd_ = createFd(ss_addr.ss_family);
-        if (INVALID_FD == fd_) {
+    if (fd_ == INVALID_FD) {
+        fd_ = createFd_i(ss_addr.ss_family, SOCK_DGRAM, IPPROTO_IP);
+        if (fd_ == INVALID_FD) {
             KM_ERRXTRACE("connect, socket error, err=" << kev::SKUtils::getLastError());
             return KMError::SOCK_ERROR;
         }
+        setSocketOption();
     }
     
     auto addr_len = static_cast<socklen_t>(kev::km_get_addr_length(ss_addr));
     int ret = ::connect(fd_, (struct sockaddr *)&ss_addr, addr_len);
     if (ret < 0) {
         KM_ERRXTRACE("connect, error, fd=" << fd_ << ", err=" << kev::SKUtils::getLastError());
-        cleanup();
+        if (!registered) {
+            cleanup();
+        }
         return KMError::SOCK_ERROR;
     }
     connected_ = true;
-    printSocket();
-    setSocketOption();
+    host_dest_ = host;
+    host_addr_ = ss_addr;
+    if (!sock_ready_) {
+        printSocket();
+    }
     if (!registered) {
         if (!registerFd(fd_)) {
-            KM_ERRXTRACE("bind, failed to register fd");
+            KM_ERRXTRACE("connect, failed to register, fd=" << fd_);
             cleanup();
             return KMError::FAILED;
         }
-        onSocketInitialized();
+    }
+    if (!sock_ready_) {
+        onSocketReady();
     }
     return KMError::NOERR;
 }
@@ -271,15 +352,75 @@ void UdpSocketBase::setSocketOption()
         return ;
     }
     
+    int ret = -1;
 #ifdef KUMA_OS_LINUX
     fcntl(fd_, F_SETFD, FD_CLOEXEC);
+#endif
+
+#ifdef KUMA_OS_WIN
+    DWORD bytesReturned = 0;
+    BOOL bNewBehavior = FALSE;
+    ret = WSAIoctl(fd_, SIO_UDP_CONNRESET, &bNewBehavior, sizeof(bNewBehavior),
+        NULL, 0, &bytesReturned, NULL, NULL);
+    if (ret < 0) {
+        KM_ERRXTRACE("setSocketOption, SIO_UDP_CONNRESET, err=" << kev::SKUtils::getLastError());
+    }
+    ret = WSAIoctl(fd_, SIO_UDP_NETRESET, &bNewBehavior, sizeof(bNewBehavior),
+        NULL, 0, &bytesReturned, NULL, NULL);
+    if (ret < 0) {
+        KM_ERRXTRACE("setSocketOption, SIO_UDP_NETRESET, err=" << kev::SKUtils::getLastError());
+    }
 #endif
     
     // nonblock
     kev::set_nonblocking(fd_);
     
     int opt_val = 1;
-    setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, (char*)&opt_val, sizeof(int));
+    if (sock_type_ == SOCK_DGRAM) {
+        setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, (char*)&opt_val, sizeof(int));
+    }
+
+    if (sock_family_ == AF_INET6) {
+        ret = setsockopt(fd_, /*SOL_IPV6*/IPPROTO_IPV6, IPV6_RECVERR, (char*)&opt_val, sizeof(int));
+        if (ret < 0) {
+            KM_ERRXTRACE("setSocketOption, IPV6_RECVERR, err=" << kev::SKUtils::getLastError());
+        }
+    } else {
+        ret = setsockopt(fd_, /*SOL_IP*/IPPROTO_IP, IP_RECVERR, (char*)&opt_val, sizeof(int));
+        if (ret < 0) {
+            KM_ERRXTRACE("setSocketOption, IP_RECVERR, err=" << kev::SKUtils::getLastError());
+        }
+    }
+    if (sock_type_ == SOCK_DGRAM) {
+        if (sock_family_ == AF_INET6) {
+#if defined(IPV6_RECVHOPLIMIT)
+            ret = setsockopt(fd_, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, (char*)&opt_val, sizeof(int));
+            if (ret < 0) {
+                KM_ERRXTRACE("setSocketOption, IPV6_RECVHOPLIMIT, err=" << kev::SKUtils::getLastError());
+            }
+            ret = setsockopt(fd_, IPPROTO_IPV6, IPV6_2292HOPLIMIT, (char*)&opt_val, sizeof(int));
+            if (ret < 0) {
+                KM_ERRXTRACE("setSocketOption, IPV6_2292HOPLIMIT, err=" << kev::SKUtils::getLastError());
+            }
+#elif defined(IPV6_HOPLIMIT)
+            ret = setsockopt(fd_, IPPROTO_IPV6, IPV6_HOPLIMIT, (char*)&opt_val, sizeof(int));
+            if (ret < 0) {
+                KM_ERRXTRACE("setSocketOption, IPV6_HOPLIMIT, err=" << kev::SKUtils::getLastError());
+            }
+#endif
+        } else {
+            ret = setsockopt(fd_, IPPROTO_IP, IP_RECVTTL, (char*)&opt_val, sizeof(int));
+            if (ret < 0) {
+                KM_ERRXTRACE("setSocketOption, IP_RECVTTL, err=" << kev::SKUtils::getLastError());
+            }
+#if defined(KUMA_OS_LINUX)
+            ret = setsockopt(fd_, SOL_IP, IP_RETOPTS, (char*)&opt_val, sizeof(int));
+            if (ret < 0) {
+                KM_ERRXTRACE("setSocketOption, IP_RETOPTS, err=" << kev::SKUtils::getLastError());
+            }
+#endif
+        }
+    }
 }
 
 KMError UdpSocketBase::mcastJoin(const std::string &mcast_addr, uint16_t mcast_port)
@@ -300,12 +441,14 @@ KMError UdpSocketBase::mcastJoin(const std::string &mcast_addr, uint16_t mcast_p
         KM_ERRXTRACE("mcastJoin, invalid mcast address family");
         return KMError::INVALID_PARAM;
     }
-    if(INVALID_FD == fd_) {
-        fd_ = createFd(mcast_addr_.ss_family);
-        if(INVALID_FD == fd_) {
-            KM_ERRXTRACE("mcastJoin, socket error, err="<<kev::SKUtils::getLastError());
+    bool registered = INVALID_FD != fd_;
+    if (fd_ == INVALID_FD) {
+        fd_ = createFd_i(bind_addr_.ss_family, SOCK_DGRAM, IPPROTO_IP);
+        if (fd_ == INVALID_FD) {
+            KM_ERRXTRACE("connect, socket error, err=" << kev::SKUtils::getLastError());
             return KMError::SOCK_ERROR;
         }
+        setSocketOption();
     }
     
     if(AF_INET == mcast_addr_.ss_family) {
@@ -325,6 +468,9 @@ KMError UdpSocketBase::mcastJoin(const std::string &mcast_addr, uint16_t mcast_p
         
         if (setsockopt(fd_, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*) &mcast_req_v4_, sizeof(mcast_req_v4_)) != 0) {
             KM_ERRXTRACE("mcastJoin, failed to join in multicast group, err="<<kev::SKUtils::getLastError());
+            if (!registered) {
+                cleanup();
+            }
             return KMError::SOCK_ERROR;
         }
     } else if(AF_INET6 == mcast_addr_.ss_family) {
@@ -340,9 +486,15 @@ KMError UdpSocketBase::mcastJoin(const std::string &mcast_addr, uint16_t mcast_p
         
         if (setsockopt(fd_, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (char*) &mcast_req_v6_, sizeof(mcast_req_v6_)) != 0) {
             KM_ERRXTRACE("mcastJoin, failed to join in multicast group, err="<<kev::SKUtils::getLastError());
+            if (!registered) {
+                cleanup();
+            }
             return KMError::SOCK_ERROR;
         }
     } else {
+        if (!registered) {
+            cleanup();
+        }
         return KMError::INVALID_PARAM;
     }
     char ttl = 32;
@@ -360,6 +512,13 @@ KMError UdpSocketBase::mcastJoin(const std::string &mcast_addr, uint16_t mcast_p
                    (char*) &loop, sizeof(loop)) != 0)
     {
         KM_WARNXTRACE("mcastJoin, failed to disable loop, err="<<kev::SKUtils::getLastError());
+    }
+    if (!registered) {
+        if (!registerFd(fd_)) {
+            KM_ERRXTRACE("mcastJoin, failed to register, fd=" << fd_);
+            cleanup();
+            return KMError::FAILED;
+        }
     }
     return KMError::NOERR;
 }
@@ -389,19 +548,25 @@ int UdpSocketBase::send(const void *data, size_t length, const std::string &host
         ret = kev::SKUtils::send(fd_, data, length, 0);
     } else {
         sockaddr_storage ss_addr = {0};
-        if (!getSockAddr(host, port, ss_addr)) {
-            KM_ERRXTRACE("send, cannot resolve host, host=" << host << ", port=" << port);
-            return -1;
+        if (host == host_dest_) {
+            ss_addr = host_addr_;
+            kev::km_set_addr_port(port, ss_addr);
+        } else {
+            if (!getSockAddr(host, port, ss_addr)) {
+                KM_ERRXTRACE("send, cannot resolve host, host=" << host << ", port=" << port);
+                return -1;
+            }
+            host_dest_ = host;
+            host_addr_ = ss_addr;
         }
-        bool initialized = INVALID_FD != fd_;
         if (!initSocket(ss_addr.ss_family)) {
             return -1;
         }
         auto addr_len = static_cast<socklen_t>(kev::km_get_addr_length(ss_addr));
         ret = kev::SKUtils::sendto(fd_, data, length, 0, (struct sockaddr*)&ss_addr, addr_len);
-        if (!initialized) {
+        if (!sock_ready_) {
             printSocket();
-            onSocketInitialized();
+            onSocketReady();
         }
     }
     if(0 == ret) {
@@ -445,19 +610,25 @@ int UdpSocketBase::send(const iovec *iovs, int count, const std::string &host, u
         ret = kev::SKUtils::send(fd_, iovs, count);
     } else {
         sockaddr_storage ss_addr = {0};
-        if (!getSockAddr(host, port, ss_addr)) {
-            KM_ERRXTRACE("send, cannot resolve host, host=" << host << ", port=" << port);
-            return -1;
+        if (host == host_dest_) {
+            ss_addr = host_addr_;
+            kev::km_set_addr_port(port, ss_addr);
+        } else {
+            if (!getSockAddr(host, port, ss_addr)) {
+                KM_ERRXTRACE("send, cannot resolve host, host=" << host << ", port=" << port);
+                return -1;
+            }
+            host_dest_ = host;
+            host_addr_ = ss_addr;
         }
-        bool initialized = INVALID_FD != fd_;
         if (!initSocket(ss_addr.ss_family)) {
             return -1;
         }
         auto addr_len = static_cast<socklen_t>(kev::km_get_addr_length(ss_addr));
         ret = kev::SKUtils::sendto(fd_, iovs, count, 0, (const sockaddr *)&ss_addr, addr_len);
-        if (!initialized) {
+        if (!sock_ready_) {
             printSocket();
-            onSocketInitialized();
+            onSocketReady();
         }
     }
     if(0 == ret) {

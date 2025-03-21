@@ -43,9 +43,6 @@
     <Filter Include="Header Files\ws">
       <UniqueIdentifier>{ccf0017a-180c-49b5-b98a-f479c60ee8e9}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\util">
-      <UniqueIdentifier>{7c11836c-7761-4c7a-8d0e-c8f661e4e03b}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\poll">
       <UniqueIdentifier>{11158e84-2c8f-4a8b-9613-8b47abf79440}</UniqueIdentifier>
     </Filter>
@@ -72,6 +69,9 @@
     </Filter>
     <Filter Include="Source Files\ioop">
       <UniqueIdentifier>{d1938d0e-9e59-4d2e-94bb-17fc4b30ca17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\utils">
+      <UniqueIdentifier>{7c11836c-7761-4c7a-8d0e-c8f661e4e03b}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -398,12 +398,6 @@
     <ClInclude Include="..\..\src\ws\WebSocketImpl.h">
       <Filter>Header Files\ws</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\util\util.h">
-      <Filter>Header Files\util</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\util\base64.h">
-      <Filter>Header Files\util</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\SocketBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -445,9 +439,6 @@
     </ClInclude>
     <ClInclude Include="..\..\src\http\v2\h2utils.h">
       <Filter>Header Files\http\v2</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\util\skbuffer.h">
-      <Filter>Header Files\util</Filter>
     </ClInclude>
     <ClInclude Include="..\..\third_party\zlib\zlib.h">
       <Filter>Source Files\zlib</Filter>
@@ -520,6 +511,15 @@
     </ClInclude>
     <ClInclude Include="..\..\src\ioop\OpUdpSocket.h">
       <Filter>Source Files\ioop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\utils\base64.h">
+      <Filter>Header Files\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\utils\skbuffer.h">
+      <Filter>Header Files\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\utils\utils.h">
+      <Filter>Header Files\utils</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

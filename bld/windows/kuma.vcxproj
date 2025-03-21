@@ -312,9 +312,9 @@
     <ClInclude Include="..\..\src\TcpSocketImpl.h" />
     <ClInclude Include="..\..\src\UdpSocketBase.h" />
     <ClInclude Include="..\..\src\UdpSocketImpl.h" />
-    <ClInclude Include="..\..\src\util\base64.h" />
-    <ClInclude Include="..\..\src\util\skbuffer.h" />
-    <ClInclude Include="..\..\src\util\util.h" />
+    <ClInclude Include="..\..\src\utils\base64.h" />
+    <ClInclude Include="..\..\src\utils\skbuffer.h" />
+    <ClInclude Include="..\..\src\utils\utils.h" />
     <ClInclude Include="..\..\src\ws\WebSocketImpl.h" />
     <ClInclude Include="..\..\src\ws\WSConnection.h" />
     <ClInclude Include="..\..\src\ws\WSConnection_v1.h" />

@@ -17,6 +17,7 @@
 #define __OPCONTEXT_H__
 
 #include "kmdefs.h"
+#include "kmbuffer.h"
 #include "libkev/src/utils/kmtrace.h"
 #include "utils/utils.h"
 #include "libkev/src/utils/skutils.h"
