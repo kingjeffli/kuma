@@ -55,6 +55,8 @@ public:
 
     void setReadCallback(EventCallback cb);
     void setErrorCallback(EventCallback cb);
+
+    SOCKET_FD getSocketFd() const { return socket_->getSocketFd(); }
     
 private:
     std::unique_ptr<UdpSocketBase> socket_;

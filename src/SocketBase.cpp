@@ -104,6 +104,13 @@ SOCKET_FD SocketBase::createFd(int addr_family)
     return ::socket(addr_family, SOCK_STREAM, 0);
 }
 
+SOCKET_FD SocketBase::createFd_i(int addr_family)
+{
+    auto fd = createFd(addr_family);
+    sock_family_ = addr_family;
+    return fd;
+}
+
 KMError SocketBase::bind(const std::string &bind_host, uint16_t bind_port)
 {
     KM_INFOTRACE("bind, bind_host=" << bind_host << ", bind_port=" << bind_port);
@@ -121,7 +128,7 @@ KMError SocketBase::bind(const std::string &bind_host, uint16_t bind_port)
     if (kev::km_set_sock_addr(bind_host.c_str(), bind_port, &hints, (struct sockaddr*)&ss_addr, sizeof(ss_addr)) != 0) {
         return KMError::INVALID_PARAM;
     }
-    fd_ = createFd(ss_addr.ss_family);
+    fd_ = createFd_i(ss_addr.ss_family);
     if (INVALID_FD == fd_) {
         KM_ERRXTRACE("bind, socket failed, err=" << kev::SKUtils::getLastError());
         return KMError::FAILED;
@@ -183,7 +190,7 @@ KMError SocketBase::connect_i(const std::string &host, uint16_t port, uint32_t t
 KMError SocketBase::connect_i(const sockaddr_storage &ss_addr, uint32_t timeout_ms)
 {
     if (INVALID_FD == fd_) {
-        fd_ = createFd(ss_addr.ss_family);
+        fd_ = createFd_i(ss_addr.ss_family);
         if (INVALID_FD == fd_) {
             KM_ERRXTRACE("connect_i, socket failed, err=" << kev::SKUtils::getLastError());
             return KMError::FAILED;
@@ -477,8 +484,8 @@ void SocketBase::setSocketOption()
     // nonblock
     kev::set_nonblocking(fd_);
 
+    int opt_val = 1;
     if (0) {
-        int opt_val = 1;
         setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, (char*)&opt_val, sizeof(int));
     }
 
@@ -488,7 +495,6 @@ void SocketBase::setSocketOption()
     
 #ifdef KUMA_OS_MAC
     // ignore SIGPIPE
-    int opt_val = 1;
     if (setsockopt(fd_, SOL_SOCKET, SO_NOSIGPIPE, &opt_val, sizeof(opt_val))) {
         // failed
     }

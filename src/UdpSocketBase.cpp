@@ -82,15 +82,7 @@
 #define IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
 #endif
 
-#ifndef IPV6_RECVERR
-#define IPV6_RECVERR 75
-#endif
-
-#ifndef IP_RECVERR
-#define IP_RECVERR 75
-#endif
-
-using namespace kuma;
+KUMA_NS_USING
 
 static bool getSockAddr(const std::string &host, uint16_t port, sockaddr_storage &ss_addr);
 
@@ -380,17 +372,6 @@ void UdpSocketBase::setSocketOption()
         setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, (char*)&opt_val, sizeof(int));
     }
 
-    if (sock_family_ == AF_INET6) {
-        ret = setsockopt(fd_, /*SOL_IPV6*/IPPROTO_IPV6, IPV6_RECVERR, (char*)&opt_val, sizeof(int));
-        if (ret < 0) {
-            KM_ERRXTRACE("setSocketOption, IPV6_RECVERR, err=" << kev::SKUtils::getLastError());
-        }
-    } else {
-        ret = setsockopt(fd_, /*SOL_IP*/IPPROTO_IP, IP_RECVERR, (char*)&opt_val, sizeof(int));
-        if (ret < 0) {
-            KM_ERRXTRACE("setSocketOption, IP_RECVERR, err=" << kev::SKUtils::getLastError());
-        }
-    }
     if (sock_type_ == SOCK_DGRAM) {
         if (sock_family_ == AF_INET6) {
 #if defined(IPV6_RECVHOPLIMIT)
@@ -691,16 +672,17 @@ int UdpSocketBase::receive(void *data, size_t length, char *ip, size_t ip_len, u
         KM_ERRXTRACE("recv, peer closed, err"<<kev::SKUtils::getLastError());
         ret = -1;
     } else if(ret < 0) {
-        if(EAGAIN == kev::SKUtils::getLastError() ||
+        auto err = kev::SKUtils::getLastError();
+        if(EAGAIN == err ||
 #ifdef WIN32
            WSAEWOULDBLOCK
 #else
            EWOULDBLOCK
 #endif
-           == kev::SKUtils::getLastError()) {
+           == err) {
             ret = 0;
         } else {
-            KM_ERRXTRACE("recv, failed, err="<<kev::SKUtils::getLastError());
+            KM_ERRXTRACE("recv, failed, err="<<err);
         }
     } else if (!connected_ && ip && ip_len > 0) {
         kev::km_get_sock_addr((struct sockaddr*)&ss_addr, sizeof(ss_addr), ip, (uint32_t)ip_len, &port);

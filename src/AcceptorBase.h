@@ -48,7 +48,7 @@ public:
     void setAcceptCallback(AcceptCallback cb) { accept_cb_ = std::move(cb); }
     void setErrorCallback(ErrorCallback cb) { error_cb_ = std::move(cb); }
     
-    SOCKET_FD getFd() const { return fd_; }
+    SOCKET_FD getSocketFd() const { return fd_; }
     EventLoopPtr eventLoop() const { return loop_.lock(); }
     
 protected:

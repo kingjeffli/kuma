@@ -24,7 +24,6 @@
 
 #include "kmdefs.h"
 #include "EventLoopImpl.h"
-#include "DnsResolver.h"
 #include "SocketBase.h"
 #include "OpContext.h"
 

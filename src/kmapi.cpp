@@ -389,9 +389,9 @@ void TcpSocket::setErrorCallback(EventCallback cb)
     pimpl_->setErrorCallback(std::move(cb));
 }
 
-SOCKET_FD TcpSocket::getFd() const
+SOCKET_FD TcpSocket::getSocketFd() const
 {
-    return pimpl_->getFd();
+    return pimpl_->getSocketFd();
 }
 
 TcpSocket::Impl* TcpSocket::pimpl() const
@@ -554,6 +554,11 @@ void UdpSocket::setReadCallback(EventCallback cb)
 void UdpSocket::setErrorCallback(EventCallback cb)
 {
     pimpl_->setErrorCallback(std::move(cb));
+}
+
+SOCKET_FD UdpSocket::getSocketFd() const
+{
+    return pimpl_->getSocketFd();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////

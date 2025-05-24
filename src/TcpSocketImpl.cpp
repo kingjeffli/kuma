@@ -104,7 +104,7 @@ TcpSocket::Impl& TcpSocket::Impl::operator= (Impl &&other) noexcept
 {
     if (this != &other) {
         if (other.socket_ && other.socket_->isConnecting()) {
-            KM_ERRXTRACE("try to move a socket that is in connecting state, fd=" << other.getFd());
+            KM_ERRXTRACE("try to move a socket that is in connecting state, fd=" << other.getSocketFd());
         }
         cleanup();
         loop_ = std::move(other.loop_);
@@ -172,9 +172,9 @@ KMError TcpSocket::Impl::setSslFlags(uint32_t ssl_flags)
 #endif
 }
 
-SOCKET_FD TcpSocket::Impl::getFd() const
+SOCKET_FD TcpSocket::Impl::getSocketFd() const
 {
-    return socket_ ? socket_->getFd() : INVALID_FD;
+    return socket_ ? socket_->getSocketFd() : INVALID_FD;
 }
 
 EventLoopPtr TcpSocket::Impl::eventLoop() const
@@ -363,7 +363,7 @@ KMError TcpSocket::Impl::detachFd(SOCKET_FD &fd, SSL* &ssl, BIO* &nbio)
 
 KMError TcpSocket::Impl::startSslHandshake(SslRole ssl_role, EventCallback cb)
 {
-    KM_INFOXTRACE("startSslHandshake, ssl_role=" << int(ssl_role) << ", fd=" << getFd());
+    KM_INFOXTRACE("startSslHandshake, ssl_role=" << int(ssl_role) << ", fd=" << getSocketFd());
     if (!socket_->isReady()) {
         KM_ERRXTRACE("startSslHandshake, invalid fd");
         return KMError::INVALID_STATE;
@@ -372,7 +372,7 @@ KMError TcpSocket::Impl::startSslHandshake(SslRole ssl_role, EventCallback cb)
     if (!createSslHandler()) {
         return KMError::SSL_ERROR;
     }
-    auto ret = ssl_handler_->init(ssl_role, getFd(), ssl_flags_);
+    auto ret = ssl_handler_->init(ssl_role, getSocketFd(), ssl_flags_);
     if (ret != KMError::NOERR) {
         KM_ERRXTRACE("startSslHandshake, failed to init SSL handler");
         return ret;

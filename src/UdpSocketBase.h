@@ -61,6 +61,8 @@ public:
     void setErrorCallback(EventCallback cb) { error_cb_ = std::move(cb); }
 
     EventLoopPtr eventLoop() const { return loop_.lock(); }
+    SOCKET_FD getSocketFd() const { return fd_; }
+    int getSocketFamily() const { return sock_family_; }
     
 protected:
     void setSocketOption();

@@ -87,7 +87,7 @@ public:
     void setWriteCallback(EventCallback cb) { write_cb_ = std::move(cb); }
     void setErrorCallback(EventCallback cb) { error_cb_ = std::move(cb); }
     
-    SOCKET_FD getFd() const;
+    SOCKET_FD getSocketFd() const;
     EventLoopPtr eventLoop() const;
     bool isReady() const;
     

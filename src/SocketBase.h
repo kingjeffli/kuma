@@ -23,10 +23,12 @@
 #define __SocketBase_H__
 
 #include "kmdefs.h"
+#include "kmbuffer.h"
 #include "EventLoopImpl.h"
 #include "DnsResolver.h"
 #include "libkev/src/utils/kmobject.h"
 #include "libkev/src/utils/DestroyDetector.h"
+
 KUMA_NS_BEGIN
 
 class SocketBase : public kev::KMObject, public kev::DestroyDetector
@@ -50,12 +52,14 @@ public:
     virtual int send(const iovec *iovs, int count);
     virtual int send(const KMBuffer &buf);
     virtual int receive(void *data, size_t length);
+
     virtual KMError pause();
     virtual KMError resume();
     virtual KMError close();
 
     virtual void notifySendBlocked();
-    SOCKET_FD getFd() const { return fd_; }
+    SOCKET_FD getSocketFd() const { return fd_; }
+    int getSocketFamily() const { return sock_family_; }
     EventLoopPtr eventLoop() const { return loop_.lock(); }
     bool isReady() const { return getState() == State::OPEN; }
     bool isConnecting() const
@@ -79,6 +83,7 @@ protected:
     State getState() const { return state_; }
     void setState(State state) { state_ = state; }
     void setSocketOption();
+    SOCKET_FD createFd_i(int addr_family);
     KMError connect_i(const std::string &addr, uint16_t port, uint32_t timeout_ms);
     virtual KMError connect_i(const sockaddr_storage &ss_addr, uint32_t timeout_ms);
     void cleanup();
@@ -98,6 +103,7 @@ protected:
 
 protected:
     SOCKET_FD           fd_{ INVALID_FD };
+    int                 sock_family_{ 2/*AF_INET*/ };
     EventLoopWeakPtr    loop_;
     State               state_{ State::IDLE };
     bool                registered_{ false };

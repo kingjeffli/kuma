@@ -281,7 +281,7 @@ public:
     void setWriteCallback(EventCallback cb);
     void setErrorCallback(EventCallback cb);
     
-    SOCKET_FD getFd() const;
+    SOCKET_FD getSocketFd() const;
     
     class Impl;
     Impl* pimpl() const;
@@ -343,6 +343,8 @@ public:
     
     void setReadCallback(EventCallback cb);
     void setErrorCallback(EventCallback cb);
+
+    SOCKET_FD getSocketFd() const;
     
     class Impl;
 private:
