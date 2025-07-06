@@ -61,8 +61,8 @@ def build_one_arch(workingPath, buildtype, arch, option):
                    '-DCMAKE_CXX_FLAGS=-m64']
     if option['rebuild'] and os.path.exists('Makefile'):
         run_and_check_error('make clean')
-    if option['memcheck']:
-        cmakeConfig.append('-DENABLE_ASAN=1')
+    if option['memcheck'] and buildtype == 'Debug':
+        cmakeConfig.append('-DKUMA_ENABLE_ASAN=1')
     run_and_check_error('cmake ../../../../.. ' + ' '.join(cmakeConfig))
     run_and_check_error('make')
 
@@ -84,7 +84,10 @@ def linux_main(option):
 
     #build libkev
     libkevPath = workingPath+'/../../../third_party/libkev'
-    run_and_check_error('python '+libkevPath+'/bld/linux/build_linux.py')
+    ops = ''
+    if option['memcheck']:
+        ops += ' --memcheck'
+    run_and_check_error('python '+libkevPath+'/bld/linux/build_linux.py ' + ops)
 
     build_linux(workingPath, option)
 

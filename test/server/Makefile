@@ -30,7 +30,7 @@ LIBS = -L$(BINDIR) -lkuma
 CXX=g++
 
 CXXFLAGS = -g -std=c++14 -pipe -fPIC -Wall -Wextra -pedantic
-LDFLAGS = -lpthread -ldl -Wl,-rpath,.
+LDFLAGS = -fsanitize=address,undefined -lpthread -ldl -Wl,-rpath,.
 
 SRCS =  \
     RunLoop.cpp\

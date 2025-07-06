@@ -201,6 +201,13 @@ else ()
     add_library(kuma SHARED ${SOURCE_FILES})
 endif ()
 
+if (KUMA_ENABLE_ASAN)
+  add_compile_options(-fsanitize=address,undefined -fsanitize-recover=all -fno-omit-frame-pointer
+                      -fno-optimize-sibling-calls -fno-var-tracking -fno-stack-protector)
+  add_link_options(-fsanitize=address,undefined)
+  message("Address Sanitizer enabled")
+endif()
+
 if (CMAKE_SYSTEM_NAME MATCHES "Windows")
     target_compile_options(kuma PRIVATE /W3 /WX)
 else ()
