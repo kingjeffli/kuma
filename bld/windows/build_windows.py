@@ -26,7 +26,10 @@ def build_one_arch(workingPath, arch, option):
         os.mkdir(archPath)
     os.chdir(archPath)
 
-    run_and_check_error('cmake -G ' + get_generator(option['msvc'], arch) + ' ../../../..')
+    cmakeConfig = []
+    if option['memcheck'] and option['debug']:
+        cmakeConfig.append('-DKUMA_ENABLE_ASAN=1')
+    run_and_check_error('cmake -G ' + get_generator(option['msvc'], arch) + ' ../../../.. ' + ' '.join(cmakeConfig))
     patch = ' /t:Rebuild ' if option['rebuild'] else ''
     if option['debug']:
         run_and_check_error('MSBuild.exe kuma.vcxproj /p:Configuration=Debug /p:Platform=' + arch + patch)
@@ -45,7 +48,11 @@ def windows_main(option):
 
     #build libkev
     libkevPath = workingPath+'/../../../third_party/libkev'
-    kevOption = '--msvc ' + option['msvc']
+    kevOption = ''
+    if option['msvc']:
+        kevOption += ' --msvc ' + option['msvc']
+    if option['memcheck']:
+        kevOption += ' --memcheck'
     run_and_check_error('python '+libkevPath+'/bld/windows/build_windows.py '+kevOption)
 
     build_windows(workingPath, option)

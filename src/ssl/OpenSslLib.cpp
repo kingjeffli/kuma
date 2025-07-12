@@ -385,7 +385,7 @@ struct app_verify_arg
 int OpenSslLib::verifyCallback(int ok, X509_STORE_CTX *ctx)
 {
     if(nullptr == ctx) {
-        return -1;
+        return ok;
     }
     SSL* ssl = static_cast<SSL*>(X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx()));
     //SSL_CTX* ssl_ctx = ::SSL_get_SSL_CTX(ssl);
@@ -418,33 +418,33 @@ int OpenSslLib::verifyCallback(int ok, X509_STORE_CTX *ctx)
         KM_INFOTRACE("verifyCallback, err="<<X509_verify_cert_error_string(x509_err));
         switch (x509_err)
         {
-                //case X509_V_ERR_CERT_NOT_YET_VALID:
-            case X509_V_ERR_CERT_HAS_EXPIRED:
-                if (ssl_flags & SSL_ALLOW_EXPIRED_CERT) {
-                    ok = 1;
-                }
-                break;
-            case X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT:
-                if (ssl_flags & SSL_ALLOW_SELF_SIGNED_CERT) {
-                    KM_INFOTRACE("verifyCallback, ... ignored, err="<<x509_err);
-                    ok = 1;
-                }
-                break;
-            case X509_V_ERR_CERT_REVOKED:
-                if (ssl_flags & SSL_ALLOW_REVOKED_CERT) {
-                    ok = 1;
-                }
-                break;
-            case X509_V_ERR_INVALID_CA:
-                if (ssl_flags & SSL_ALLOW_ANY_ROOT) {
-                    ok = 1;
-                }
-                break;
-            case X509_V_ERR_CERT_UNTRUSTED:
-                if (ssl_flags & SSL_ALLOW_UNTRUSTED_CERT) {
-                    ok = 1;
-                }
-                break;
+        //case X509_V_ERR_CERT_NOT_YET_VALID:
+        case X509_V_ERR_CERT_HAS_EXPIRED:
+            if (ssl_flags & SSL_ALLOW_EXPIRED_CERT) {
+                ok = 1;
+            }
+            break;
+        case X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT:
+            if (ssl_flags & SSL_ALLOW_SELF_SIGNED_CERT) {
+                KM_INFOTRACE("verifyCallback, ... ignored, err="<<x509_err);
+                ok = 1;
+            }
+            break;
+        case X509_V_ERR_CERT_REVOKED:
+            if (ssl_flags & SSL_ALLOW_REVOKED_CERT) {
+                ok = 1;
+            }
+            break;
+        case X509_V_ERR_INVALID_CA:
+            if (ssl_flags & SSL_ALLOW_ANY_ROOT) {
+                ok = 1;
+            }
+            break;
+        case X509_V_ERR_CERT_UNTRUSTED:
+            if (ssl_flags & SSL_ALLOW_UNTRUSTED_CERT) {
+                ok = 1;
+            }
+            break;
         }
     }
     
