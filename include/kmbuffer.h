@@ -125,13 +125,6 @@ public:
     {
         
     }
-    ~_SharedData()
-    {
-        if (data_) {
-            data_deleter_(data_, size_);
-            data_ = nullptr;
-        }
-    }
     
     void* data() override
     {
@@ -157,10 +150,20 @@ public:
     {
         long tmp = --ref_count_;
         if (tmp == 0){
+            auto alloc_size = alloc_size_;
             this->~_SharedData();
-            deleter_(this, alloc_size_);
+            deleter_(this, alloc_size);
         }
         return tmp;
+    }
+
+private:
+    ~_SharedData()
+    {
+        if (data_) {
+            data_deleter_(data_, size_);
+            data_ = nullptr;
+        }
     }
     
 private:

@@ -84,10 +84,10 @@ def linux_main(option):
 
     #build libkev
     libkevPath = workingPath+'/../../../third_party/libkev'
-    ops = ''
+    kevOpts = ''
     if option['memcheck']:
-        ops += ' --memcheck'
-    run_and_check_error('python '+libkevPath+'/bld/linux/build_linux.py ' + ops)
+        kevOpts += ' --memcheck'
+    run_and_check_error('python '+libkevPath+'/bld/linux/build_linux.py ' + kevOpts)
 
     build_linux(workingPath, option)
 

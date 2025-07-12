@@ -121,6 +121,18 @@ elseif (CMAKE_SYSTEM_NAME MATCHES "Android")
     add_definitions(-DANDROID -DLINUX)
 endif ()
 
+if (KUMA_ENABLE_ASAN)
+  add_compile_options(
+    $<$<CONFIG:DEBUG>:-fsanitize=address,undefined>
+    $<$<CONFIG:DEBUG>:-fsanitize-recover=all>
+    $<$<CONFIG:DEBUG>:-fno-omit-frame-pointer>
+    $<$<CONFIG:DEBUG>:-fno-optimize-sibling-calls>
+    $<$<CONFIG:DEBUG>:-fno-var-tracking>
+    $<$<CONFIG:DEBUG>:-fno-stack-protector>)
+  add_link_options($<$<CONFIG:DEBUG>:-fsanitize=address,undefined>)
+  message("Address Sanitizer enabled")
+endif()
+
 if (CMAKE_SYSTEM_NAME MATCHES "Windows")
     option(WIN_USE_MD "Use DLL-specific version of multithread runtime library (/MD)" OFF)
     #message(STATUS "++++++++ flags=${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
@@ -201,13 +213,6 @@ else ()
     add_library(kuma SHARED ${SOURCE_FILES})
 endif ()
 
-if (KUMA_ENABLE_ASAN)
-  add_compile_options(-fsanitize=address,undefined -fsanitize-recover=all -fno-omit-frame-pointer
-                      -fno-optimize-sibling-calls -fno-var-tracking -fno-stack-protector)
-  add_link_options(-fsanitize=address,undefined)
-  message("Address Sanitizer enabled")
-endif()
-
 if (CMAKE_SYSTEM_NAME MATCHES "Windows")
     target_compile_options(kuma PRIVATE /W3 /WX)
 else ()
@@ -234,7 +239,7 @@ elseif (CMAKE_SYSTEM_NAME MATCHES "Darwin")
     endif ()
 elseif (CMAKE_SYSTEM_NAME MATCHES "Linux")
     set(LIBRARY_OUTPUT_PATH "${PROJ_ROOT_DIR}/bin/linux/${PROCESSOR_ARCH}/${CMAKE_BUILD_TYPE}")
-    target_link_libraries(kuma kev crypto.1.1 ssl.1.1)
+    target_link_libraries(kuma kev crypto ssl)
 elseif (CMAKE_SYSTEM_NAME MATCHES "Android")
     set(LIBRARY_OUTPUT_PATH "${PROJ_ROOT_DIR}/bin/android/${CMAKE_ANDROID_ARCH_ABI}")
     target_link_libraries(kuma kev crypto.1.1 ssl.1.1)

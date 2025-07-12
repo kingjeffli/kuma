@@ -28,7 +28,7 @@ def get_default_options(systemName):
     return opt
 
 def get_option(argv, systemName):
-    parser = OptionParser(description='libkev build option')
+    parser = OptionParser(description='kuma build option')
     parser.add_option('--rebuild', dest='rebuild', action='store_true', default=False,
                       help='clean up before build')
     parser.add_option('--debug', dest='debug', action='store_true', default=False,
