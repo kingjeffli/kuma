@@ -46,35 +46,46 @@ using namespace kuma;
 
 KUMA_NS_BEGIN
 
-const int record_expires_intrval_ms = 10000; // 10 senonds
+constexpr int record_expires_ms = 10000; // 10 senonds
 static std::string toEAIString(int v);
+
+using addrinfo_ptr = std::shared_ptr<struct addrinfo>;
 
 class DnsRecord
 {
 public:
     DnsRecord() = default;
     DnsRecord(const DnsRecord &rhs)
-    : host(rhs.host), time(rhs.time)
+    : host(rhs.host), addr_list(rhs.addr_list), time(rhs.time)
     {
-        memcpy(&addr, &rhs.addr, sizeof(addr));
+        
     }
     DnsRecord(DnsRecord &&rhs)
-    : host(std::move(rhs.host)), time(std::move(rhs.time))
+    : host(std::move(rhs.host)), addr_list(std::move(rhs.addr_list)), time(std::move(rhs.time))
     {
-        memcpy(&addr, &rhs.addr, sizeof(addr));
+        
     }
     DnsRecord& operator=(const DnsRecord &rhs)
     {
         if (&rhs != this) {
             host = rhs.host;
             time = rhs.time;
-            memcpy(&addr, &rhs.addr, sizeof(addr));
+            addr_list = rhs.addr_list;
+        }
+        return *this;
+    }
+    DnsRecord& operator=(DnsRecord &&rhs)
+    {
+        if (&rhs != this) {
+            host = std::move(rhs.host);
+            time = std::move(rhs.time);
+            addr_list = std::move(rhs.addr_list);
         }
         return *this;
     }
     
     std::string host;
-    sockaddr_storage addr{0};
+    std::vector<sockaddr_storage> addr_list;
     time_point<steady_clock> time;
 };
 static LockType s_records_locker;
@@ -104,27 +115,12 @@ DnsResolver& DnsResolver::get()
     return s_instance;
 }
 
-DnsResolver::Token DnsResolver::resolve(const std::string &host, uint16_t port, ResolveCallback cb)
+KMError DnsResolver::resolve(const std::string &host, sockaddr_storage &addr)
 {
-    if (host.empty() || !cb) {
-        return Token();
-    }
-    auto slot = std::make_shared<Slot>(std::move(cb), port);
-    {
-        LockGuard g(locker_);
-        auto &slots = requests_[host];
-        slots.push_back(slot);
-    }
-    conv_.notify_one();
-    return slot;
-}
-
-KMError DnsResolver::resolve(const std::string &host, uint16_t port, sockaddr_storage &addr)
-{
-    if (getAddress(host, port, addr) == KMError::NOERR) {
+    if (getAddress(host, addr) == KMError::NOERR) {
         return KMError::NOERR;
     }
-    return doResolve(host, port, addr);
+    return doResolve(host, addr);
 }
 
 void DnsResolver::cancel(const std::string &host, const Token &t)
@@ -192,13 +188,12 @@ void DnsResolver::dnsProc()
         }
 
         sockaddr_storage addr = { 0 };
-        auto ret = doResolve(host, 0, addr);
+        auto ret = doResolve(host, addr);
         char ip[128] = { 0 };
         kev::km_get_sock_addr((struct sockaddr*)&addr, sizeof(addr), ip, sizeof(ip), nullptr);
         KM_INFOTRACE("DNS resolved, host="<<host<<", ip="<<ip);
         for (auto &slot : slots) {
             if (slot) {
-                kev::km_set_addr_port(slot->port, addr);
                 (*slot)(ret, addr);
             }
         }
@@ -207,23 +202,36 @@ void DnsResolver::dnsProc()
     KM_INFOTRACE("DNS resolving thread exited");
 }
 
-KMError DnsResolver::doResolve(const std::string &host, uint16_t port, sockaddr_storage &addr)
+KMError DnsResolver::doResolve(const std::string &host, sockaddr_storage &addr)
 {
     struct addrinfo hints = { 0 };
     hints.ai_family = AF_UNSPEC;
     hints.ai_flags = AI_ADDRCONFIG; // will block 10 seconds in some case if not set AI_ADDRCONFIG
-    auto ret = kev::km_set_sock_addr(host.c_str(), port, &hints, (struct sockaddr*)&addr, sizeof(addr));
-    if (ret != 0) {
+    struct addrinfo* ai = nullptr;
+    auto ret = getaddrinfo(host.c_str(), nullptr, &hints, &ai);
+    if(ret != 0 || !ai) {
         KM_ERRTRACE("DNS resolving failure, host=" << host << ", err=" << toEAIString(ret));
+        if(ai) freeaddrinfo(ai);
         return KMError::FAILED;
-    } else {
-        DnsRecord dr;
-        dr.host = host;
-        dr.time = steady_clock::now();
-        memcpy(&(dr.addr), &addr, sizeof(addr));
-        addRecord(dr);
-        return KMError::NOERR;
     }
+    std::vector<sockaddr_storage> addr_list;
+    for (auto *rp = ai; rp; rp = rp->ai_next) {
+        sockaddr_storage ss_addr;
+        size_t sz = (std::min)(sizeof(ss_addr), (size_t)ai->ai_addrlen);
+        memcpy(&ss_addr, ai->ai_addr, sz);
+        addr_list.emplace_back(ss_addr);
+    }
+    freeaddrinfo(ai);
+    if (addr_list.empty()) {
+        return KMError::FAILED;
+    }
+    addr = addr_list[0];
+    DnsRecord dr;
+    dr.host = host;
+    dr.time = steady_clock::now();
+    dr.addr_list = std::move(addr_list);
+    addRecord(dr);
+    return KMError::NOERR;
 }
 
 void DnsResolver::addRecord(const DnsRecord &dr)
@@ -232,16 +240,37 @@ void DnsResolver::addRecord(const DnsRecord &dr)
     s_dns_records[dr.host] = dr;
 }
 
-KMError DnsResolver::getAddress(const std::string &host, uint16_t port, sockaddr_storage &addr)
+void DnsResolver::addRecord(DnsRecord &&dr)
+{
+    LockGuard g(s_records_locker);
+    s_dns_records[dr.host] = std::move(dr);
+}
+
+KMError DnsResolver::getAddress(const std::string &host, sockaddr_storage &addr)
 {
     LockGuard g(s_records_locker);
     auto it = s_dns_records.find(host);
     if (it != s_dns_records.end()) {
         auto current = steady_clock::now();
         auto diff_ms = duration_cast<milliseconds>(current - it->second.time).count();
-        if (diff_ms < record_expires_intrval_ms) {
-            memcpy(&addr, &it->second.addr, sizeof(addr));
-            kev::km_set_addr_port(port, addr);
+        if (diff_ms < record_expires_ms && !it->second.addr_list.empty()) {
+            addr = it->second.addr_list[0];
+            return KMError::NOERR;
+        }
+        s_dns_records.erase(it);
+    }
+    return KMError::NOT_EXIST;
+}
+
+KMError DnsResolver::getAddresses(const std::string &host, std::vector<sockaddr_storage> &addr_list)
+{
+    LockGuard g(s_records_locker);
+    auto it = s_dns_records.find(host);
+    if (it != s_dns_records.end()) {
+        auto current = steady_clock::now();
+        auto diff_ms = duration_cast<milliseconds>(current - it->second.time).count();
+        if (diff_ms < record_expires_ms && !it->second.addr_list.empty()) {
+            addr_list = it->second.addr_list;
             return KMError::NOERR;
         }
         s_dns_records.erase(it);

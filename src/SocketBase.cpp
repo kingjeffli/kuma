@@ -161,11 +161,13 @@ KMError SocketBase::connect(const std::string &host, uint16_t port, EventCallbac
     }
     if (!kev::km_is_ip_address(host.c_str())) {
         sockaddr_storage ss_addr = { 0 };
-        if (DnsResolver::get().getAddress(host, port, ss_addr) == KMError::NOERR) {
+        if (DnsResolver::get().getAddress(host, ss_addr) == KMError::NOERR) {
+            kev::km_set_addr_port(port, ss_addr);
             return connect_i(ss_addr, timeout_ms);
         }
         setState(State::RESOLVING);
-        dns_token_ = DnsResolver::get().resolve(host, port, [this](KMError err, const sockaddr_storage &addr) {
+        dns_token_ = DnsResolver::get().resolve(host, [this, port](KMError err, sockaddr_storage &addr) {
+            kev::km_set_addr_port(port, addr);
             onResolved(err, addr);
         });
         return KMError::NOERR;

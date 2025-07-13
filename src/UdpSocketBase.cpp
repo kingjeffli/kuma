@@ -766,10 +766,11 @@ void UdpSocketBase::ioReady(KMEvent events, void *ol, size_t io_size)
 static bool getSockAddr(const std::string &host, uint16_t port, sockaddr_storage &ss_addr)
 {
     if (!kev::km_is_ip_address(host.c_str())) {
-        if (DnsResolver::get().resolve(host, port, ss_addr) != KMError::NOERR) {
+        if (DnsResolver::get().resolve(host, ss_addr) != KMError::NOERR) {
             KM_ERRTRACE("UdpSocket::getSockAddr, cannot resolve host, host=" << host << ", port=" << port);
             return false;
         }
+        kev::km_set_addr_port(port, ss_addr);
     }
     else {
         struct addrinfo hints = { 0 };

@@ -21,7 +21,6 @@
 
 #include "H2ConnectionMgr.h"
 #include "libkev/src/utils/kmtrace.h"
-#include "DnsResolver.h"
 
 using namespace kuma;
 

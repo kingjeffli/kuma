@@ -50,36 +50,52 @@ using LockGuardR = std::lock_guard<LockTypeR>;
 class DnsRecord;
 class DnsResolver final {
 public:
-    using ResolveCallback = std::function<void(KMError err, const sockaddr_storage &addr)>;
     class Slot;
     using Token = std::weak_ptr<Slot>;
     
     static DnsResolver& get();
-    KMError getAddress(const std::string &host, uint16_t port, sockaddr_storage &addr);
-    Token resolve(const std::string &host, uint16_t port, ResolveCallback cb);
-    KMError resolve(const std::string &host, uint16_t port, sockaddr_storage &addr);
+    KMError getAddress(const std::string &host, sockaddr_storage &addr);
+    KMError getAddresses(const std::string &host, std::vector<sockaddr_storage> &addr_list);
+    // Resolve a host synchronously.
+    KMError resolve(const std::string &host, sockaddr_storage &addr);
+    // Resolve a host asynchronously.
+    template<typename F> // F: void(KMError, sockaddr_storage&)
+    Token resolve(const std::string &host, F &&f) {
+        if (host.empty()) {
+            return {};
+        }
+        auto slot = std::make_shared<Slot>(std::forward<F>(f));
+        {
+            LockGuard g(locker_);
+            auto &slots = requests_[host];
+            slots.emplace_back(slot);
+        }
+        conv_.notify_one();
+        return slot;
+    }
     void cancel(const std::string &host, const Token &t);
     void stop();
 
     class Slot
     {
+        using Callback = std::function<void(KMError, sockaddr_storage&)>;
     public:
-        Slot(ResolveCallback &&o, uint16_t port=0) : cb(std::move(o)), port(port) {}
+        template<typename F> // F: void(KMError, sockaddr_storage&)
+        Slot(F &&f) : cb(std::forward<F>(f)) {}
         void cancel() {
             LockGuardR g(m);
-            cb = nullptr;
+            cb = {};
         }
         
     protected:
         friend class DnsResolver;
-        void operator()(KMError err, const sockaddr_storage &addr) {
+        void operator()(KMError err, sockaddr_storage &addr) {
+            LockGuardR g(m);
             if (cb) {
-                LockGuardR g(m);
-                if (cb) cb(err, addr);
+                cb(err, addr);
             }
         }
-        ResolveCallback cb;
-        uint16_t port = 0;
+        Callback cb;
         LockTypeR m;
     };
     
@@ -89,9 +105,10 @@ protected:
     
     bool init();
     void dnsProc();
-    KMError doResolve(const std::string &host, uint16_t port, sockaddr_storage &addr);
+    KMError doResolve(const std::string &host, sockaddr_storage &addr);
     
     void addRecord(const DnsRecord &dr);
+    void addRecord(DnsRecord &&dr);
     
 protected:
     LockType locker_;
