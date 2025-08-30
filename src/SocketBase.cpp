@@ -221,14 +221,9 @@ KMError SocketBase::connect_i(const sockaddr_storage &ss_addr, uint32_t timeout_
         return KMError::FAILED;
     }
 
-    socklen_t len = sizeof(ss_addr);
-    char local_ip[128] = { 0 };
+    std::string local_ip;
     uint16_t local_port = 0;
-    ret = getsockname(fd_, (struct sockaddr*)&ss_addr, &len);
-    if (ret != -1) {
-        kev::km_get_sock_addr((struct sockaddr*)&ss_addr, sizeof(ss_addr), local_ip, sizeof(local_ip), &local_port);
-    }
-
+    kev::SKUtils::getSockName(fd_, &local_ip, &local_port);
     KM_INFOXTRACE("connect_i, fd=" << fd_ << ", local_ip=" << local_ip
         << ", local_port=" << local_port << ", state=" << (int)getState());
 

@@ -172,6 +172,15 @@ KMError TcpSocket::Impl::setSslFlags(uint32_t ssl_flags)
 #endif
 }
 
+uint32_t TcpSocket::Impl::getSslFlags() const
+{
+#ifdef KUMA_HAS_OPENSSL
+    return ssl_flags_;
+#else
+    return 0;
+#endif
+}
+
 SOCKET_FD TcpSocket::Impl::getSocketFd() const
 {
     return socket_ ? socket_->getSocketFd() : INVALID_FD;

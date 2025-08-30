@@ -114,13 +114,9 @@ bool UdpSocketBase::initSocket(int ss_family)
 void UdpSocketBase::printSocket() const
 {
     if (INVALID_FD != fd_) {
-        sockaddr_storage ss_addr = {0};
-        socklen_t len = sizeof(ss_addr);
-        char local_ip[128] = {0};
+        std::string local_ip;
         uint16_t local_port = 0;
-        if(getsockname(fd_, (struct sockaddr*)&ss_addr, &len) != -1) {
-            kev::km_get_sock_addr((struct sockaddr*)&ss_addr, sizeof(ss_addr), local_ip, sizeof(local_ip), &local_port);
-        }
+        kev::SKUtils::getSockName(fd_, &local_ip, &local_port);
         KM_INFOXTRACE("printSocket, fd="<<fd_<<", local_ip="<<local_ip<<", local_port="<<local_port);
     }
 }

@@ -58,7 +58,7 @@ public:
     Impl& operator= (Impl &&other) noexcept;
     
     KMError setSslFlags(uint32_t ssl_flags);
-    uint32_t getSslFlags() const { return ssl_flags_; }
+    uint32_t getSslFlags() const;
     bool sslEnabled() const;
     KMError bind(const std::string &bind_host, uint16_t bind_port);
     KMError connect(const std::string &host, uint16_t port, EventCallback cb, uint32_t timeout_ms = 0);
