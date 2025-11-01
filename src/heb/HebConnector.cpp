@@ -209,4 +209,5 @@ void HebConnector::cleanup()
     dns_token_.reset();
     sockets_.clear();
     timer_.reset();
+    next_timer_.reset();
 }
