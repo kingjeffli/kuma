@@ -94,11 +94,15 @@ void HebConnector::onResolved(KMError err, const std::vector<sockaddr_storage>& 
         if (addr.ss_family == AF_INET6) {
             std::string ip;
             kev::km_get_sock_addr(addr, ip, nullptr);
-            ipv6_ips_.emplace_back(std::move(ip));
+            if (std::find(ipv6_ips_.begin(), ipv6_ips_.end(), ip) == ipv6_ips_.end()) {
+                ipv6_ips_.emplace_back(std::move(ip));
+            }
         } else if (addr.ss_family == AF_INET) {
             std::string ip;
             kev::km_get_sock_addr(addr, ip, nullptr);
-            ipv4_ips_.emplace_back(std::move(ip));
+            if (std::find(ipv4_ips_.begin(), ipv4_ips_.end(), ip) == ipv4_ips_.end()) {
+                ipv4_ips_.emplace_back(std::move(ip));
+            }
         }
     }
 
@@ -136,7 +140,7 @@ std::string HebConnector::getNextIp()
 
 void HebConnector::connect(const std::string &ip)
 {
-    auto socket = std::make_unique<SocketBase>(loop_.lock());
+    auto socket = SocketBase::create(loop_.lock());
     auto* s = socket.get();
     sockets_[ip] = std::move(socket);
     s->connect(ip, port_, [this, ip](KMError err) {

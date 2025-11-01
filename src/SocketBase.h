@@ -72,6 +72,8 @@ public:
     void setWriteCallback(EventCallback cb) { write_cb_ = std::move(cb); }
     void setErrorCallback(EventCallback cb) { error_cb_ = std::move(cb); }
 
+    static std::unique_ptr<SocketBase> create(const EventLoopPtr &loop);
+
 protected:
     enum class State {
         IDLE,

@@ -70,13 +70,6 @@
 #include "libkev/src/utils/utils.h"
 #include "libkev/src/utils/kmtrace.h"
 #include "SocketBase.h"
-#ifdef KUMA_OS_WIN
-//# include "iocp/IocpSocket.h"
-# include "ioop/OpSocket.h"
-#endif
-#if defined(KUMA_OS_LINUX)
-# include "ioop/OpSocket.h"
-#endif
 #include "heb/HebConnector.h"
 #include "ssl/BioHandler.h"
 #include "ssl/SioHandler.h"
@@ -719,21 +712,7 @@ bool TcpSocket::Impl::createSocket()
     if (!loop) {
         return false;
     }
-#ifdef KUMA_OS_WIN
-    if (loop->getPollType() == PollType::IOCP) {
-        //socket_.reset(new IocpSocket(loop));
-        socket_ = std::make_unique<OpSocket>(loop, -1);
-    }
-    else
-#elif defined(KUMA_OS_LINUX)
-    if (loop->getPollType() == PollType::IORING) {
-        socket_ = std::make_unique<OpSocket>(loop, 1);
-    }
-    else
-#endif
-    {
-        socket_ = std::make_unique<SocketBase>(loop);
-    }
+    socket_ = SocketBase::create(loop);
     socket_->setReadCallback([this](KMError err) {
         onReceive(err);
     });

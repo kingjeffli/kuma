@@ -20,6 +20,13 @@
 */
 
 #include "SocketBase.h"
+#ifdef KUMA_OS_WIN
+//# include "iocp/IocpSocket.h"
+# include "ioop/OpSocket.h"
+#endif
+#if defined(KUMA_OS_LINUX)
+# include "ioop/OpSocket.h"
+#endif
 #include "libkev/src/utils/utils.h"
 #include "libkev/src/utils/kmtrace.h"
 #include "libkev/src/utils/skutils.h"
@@ -605,6 +612,27 @@ void SocketBase::ioReady(KMEvent events, void *ol, size_t io_size)
         //KM_WARNXTRACE("ioReady, invalid state="<<getState()<<", events="<<events);
         break;
     }
+}
+
+std::unique_ptr<SocketBase> SocketBase::create(const EventLoopPtr &loop)
+{
+    std::unique_ptr<SocketBase> socket;
+#ifdef KUMA_OS_WIN
+    if (loop->getPollType() == PollType::IOCP) {
+        //socket.reset(new IocpSocket(loop));
+        socket = std::make_unique<OpSocket>(loop, -1);
+    }
+    else
+#elif defined(KUMA_OS_LINUX)
+    if (loop->getPollType() == PollType::IORING) {
+        socket = std::make_unique<OpSocket>(loop, 1);
+    }
+    else
+#endif
+    {
+        socket = std::make_unique<SocketBase>(loop);
+    }
+    return socket;
 }
 
 KUMA_NS_BEGIN
