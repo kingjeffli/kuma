@@ -176,6 +176,7 @@ void HebConnector::onConnect(KMError err, const std::string &ip)
             sockets_.clear();
             connecting_ = false;
             timer_.reset();
+            next_timer_.reset();
             if (connect_cb_) {
                 connect_cb_(KMError::NOERR, std::move(socket));
             }
