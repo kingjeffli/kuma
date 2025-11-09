@@ -680,7 +680,10 @@ int UdpSocketBase::receive(void *data, size_t length, char *ip, size_t ip_len, u
         } else {
             KM_ERRXTRACE("recv, failed, err="<<err);
         }
-    } else if (!connected_ && ip && ip_len > 0) {
+    } else if (ip && ip_len > 0) {
+        if (connected_) {
+            ss_addr = host_addr_;
+        }
         kev::km_get_sock_addr((struct sockaddr*)&ss_addr, sizeof(ss_addr), ip, (uint32_t)ip_len, &port);
     }
     
